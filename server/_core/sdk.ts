@@ -96,7 +96,7 @@ class SDKServer {
     return new Map(Object.entries(parsed));
   }
 
-  async authenticateRequest(req: Request): Promise<User> {
+ async authenticateRequest(req: Request): Promise<User> {
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -105,21 +105,19 @@ class SDKServer {
       throw ForbiddenError("Invalid session cookie");
     }
 
-    const sessionUserId = session.openId;
-    const signedInAt = new Date();
+    const sessionUserId = session.openId; // O ID que vem do JWT
     let user = await db.getUserByOpenId(sessionUserId);
 
     if (!user) {
       throw ForbiddenError("User not found");
     }
 
+    // AQUI ESTAVA O ERRO:
+    // Ajustamos para usar as propriedades que realmente existem no seu objeto User
     await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
+      username: user.username, 
+      lastSignedIn: new Date(),
     });
 
     return user;
   }
-}
-
-export const sdk = new SDKServer();
