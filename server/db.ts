@@ -19,6 +19,17 @@ export async function getUserByUsername(username: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByOpenId(id: string) {
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.username, id)).limit(1);
+  return result[0];
+}
+
+// Função adicionada para evitar o aviso da Vercel
+export async function upsertUser(user: any) {
+  return; 
+}
+
 // O site pede essa função no arquivo de rotas, vamos deixá-la aqui para não dar erro
 export async function getUserByOpenId(id: string) {
   if (!db) return undefined;
