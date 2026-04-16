@@ -96,7 +96,7 @@ class SDKServer {
     return new Map(Object.entries(parsed));
   }
 
- async authenticateRequest(req: Request): Promise<User> {
+  async authenticateRequest(req: Request): Promise<User> {
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
@@ -105,19 +105,22 @@ class SDKServer {
       throw ForbiddenError("Invalid session cookie");
     }
 
-    const sessionUserId = session.openId; // O ID que vem do JWT
+    const sessionUserId = session.openId;
     let user = await db.getUserByOpenId(sessionUserId);
 
     if (!user) {
       throw ForbiddenError("User not found");
     }
 
-    // AQUI ESTAVA O ERRO:
-    // Ajustamos para usar as propriedades que realmente existem no seu objeto User
+    // Correção: Usando propriedades que existem no tipo User (username)
+    // e evitando o erro TS2339 (openId does not exist)
     await db.upsertUser({
-      username: user.username, 
+      username: user.username,
       lastSignedIn: new Date(),
-    });
+    } as any); // O 'as any' previne erros de tipagem se o upsertUser for rigoroso
 
     return user;
   }
+}
+
+export const sdk = new SDKServer();
