@@ -1,12 +1,8 @@
 import "dotenv/config";
-import express from "express";
+import express, { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-
-// A correção principal está nestas duas linhas abaixo:
-// Mesmo o arquivo sendo .ts no seu notebook VAIO, aqui usamos .js 
-// para que a Vercel encontre o arquivo compilado no servidor.
 import { appRouter } from "../routers.js";
 import { createContext } from "./context.js";
 
@@ -30,12 +26,11 @@ app.use(
 );
 
 // Servir arquivos estáticos do build
-// Certifique-se de que a pasta 'dist/public' existe após o build no seu GitHub
 const publicPath = path.join(__dirname, "../../dist/public");
 app.use(express.static(publicPath));
 
-// Servir o index.html para todas as rotas (SPA)
-app.get("*", (req, res) => {
+// CORREÇÃO: Tipagem explícita para evitar o erro TS7006
+app.get("*", (req: Request, res: Response) => {
   res.sendFile(path.join(publicPath, "index.html"));
 });
 

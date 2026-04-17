@@ -6,13 +6,13 @@ import {
   getAllCategories, getAllContactMessages, getAllProducts,
   getCategoryById, getFeaturedProducts, getProductById,
   getUnreadMessageCount, markMessageRead, updateCategory, updateProduct
-} from "./db";
-import { notifyOwner } from "./_core/notification";
+} from "./db.js"; // Lembre-se: use .js se estiver dando erro de módulo
+import { notifyOwner } from "./_core/notification.js";
 import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { storagePut } from "./storage";
+import { getSessionCookieOptions } from "./_core/cookies.js";
+import { systemRouter } from "./_core/systemRouter.js";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc.js";
+import { storagePut } from "./storage.js";
 import { nanoid } from "nanoid";
 
 // ─── Admin guard ──────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ const productsRouter = router({
       for (const [k, v] of Object.entries(data)) {
         if (v !== undefined) cleanData[k] = v;
       }
-      await updateProduct(id, cleanData as Parameters<typeof updateProduct>[1]);
+      await updateProduct(id, cleanData as any);
       return { success: true };
     }),
 
@@ -156,7 +156,6 @@ const contactRouter = router({
     }))
     .mutation(async ({ input }) => {
       await createContactMessage(input);
-      // Notify owner
       const productInfo = input.productId ? ` (Produto ID: ${input.productId})` : "";
       await notifyOwner({
         title: `Nova mensagem de ${input.name}`,
@@ -190,8 +189,11 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      // Correção para o erro clearCookie não encontrado no tipo
+      if (ctx.res && typeof (ctx.res as any).clearCookie === 'function') {
+        const cookieOptions = getSessionCookieOptions(ctx.req as any);
+        (ctx.res as any).clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      }
       return { success: true } as const;
     }),
   }),
