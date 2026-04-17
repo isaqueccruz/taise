@@ -3,7 +3,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "../routers";
+import { appRouter } from "../routers.ts";
 import { createContext } from "./context";
 
 const __filename = fileURLToPath(import.meta.url);
