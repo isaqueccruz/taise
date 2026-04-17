@@ -3,7 +3,11 @@
   "builds": [
     {
       "src": "server/_core/index.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "runtime": "nodejs20.x",
+        "helpers": true
+      }
     },
     {
       "src": "package.json",
@@ -11,10 +15,18 @@
       "config": { "distDir": "dist/public" }
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "server/_core/index.ts"
+      "src": "/api/trpc/(.*)",
+      "dest": "server/_core/index.ts"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "server/_core/index.ts"
     }
   ]
 }
