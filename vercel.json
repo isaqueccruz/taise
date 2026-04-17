@@ -1,32 +1,17 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "server/_core/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "runtime": "nodejs20.x",
-        "helpers": true
-      }
+      "source": "/api/trpc/(.*)",
+      "destination": "/server/_core/index.ts"
     },
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist/public" }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/trpc/(.*)",
-      "dest": "server/_core/index.ts"
+      "source": "/admin(.*)",
+      "destination": "/server/_core/index.ts"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "server/_core/index.ts"
+      "source": "/((?!api/trpc|admin).*)",
+      "destination": "/$1"
     }
   ]
 }

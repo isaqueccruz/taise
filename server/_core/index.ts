@@ -3,10 +3,9 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-
-// CORREÇÃO ESM: Uso obrigatório de extensões .js para arquivos locais
 import { appRouter } from "../routers.js";
 import { createContext } from "./context.js";
+import fs from "fs"; // Adicione este import
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,7 +13,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -27,25 +25,31 @@ app.use(
   })
 );
 
-// Servir arquivos estáticos do build
-// path.resolve garante que a Vercel localize a pasta independente do diretório de execução
-const publicPath = path.resolve(__dirname, "../../dist/public");
+// Tenta encontrar a pasta dist/public em diferentes níveis (local vs Vercel)
+const getPublicPath = () => {
+  const paths = [
+    path.join(process.cwd(), "dist", "public"),
+    path.join(__dirname, "..", "..", "dist", "public"),
+    path.join(__dirname, "dist", "public")
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return paths[0]; // Fallback
+};
+
+const publicPath = getPublicPath();
 app.use(express.static(publicPath));
 
-// Servir o index.html para todas as rotas (SPA)
-// Tipagem Request e Response explícita para evitar o erro TS7006 visto nos logs
 app.get("*", (req: Request, res: Response) => {
   const indexPath = path.join(publicPath, "index.html");
-  
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      console.error("Erro ao enviar index.html:", err);
-      res.status(500).send("Erro interno: O front-end não foi encontrado no servidor.");
-    }
-  });
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send(`Arquivo index.html não encontrado em: ${publicPath}`);
+  }
 });
 
-// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}/`);
 });
