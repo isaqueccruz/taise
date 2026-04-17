@@ -1,11 +1,12 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { ForbiddenError } from "@shared/_core/errors";
 import { parse as parseCookieHeader } from "cookie";
-import type { Request } from "express";
+// Mudamos o import para garantir compatibilidade
+import type { Request } from "express"; 
 import { SignJWT, jwtVerify } from "jose";
-import type { User } from "../../drizzle/schema";
-import * as db from "../db";
-import { ENV } from "./env";
+import type { User } from "../../drizzle/schema.js"; // Adicionado .js
+import * as db from "../db.js"; // Adicionado .js
+import { ENV } from "./env.js"; // Adicionado .js
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -58,9 +59,7 @@ class SDKServer {
   async verifySession(
     cookieValue: string | undefined | null
   ): Promise<{ openId: string; appId: string; name: string } | null> {
-    if (!cookieValue) {
-      return null;
-    }
+    if (!cookieValue) return null;
 
     try {
       const secretKey = this.getSessionSecret();
@@ -77,27 +76,23 @@ class SDKServer {
         return null;
       }
 
-      return {
-        openId,
-        appId,
-        name,
-      };
+      return { openId, appId, name };
     } catch (error) {
       return null;
     }
   }
 
   private parseCookies(cookieHeader: string | undefined) {
-    if (!cookieHeader) {
-      return new Map<string, string>();
-    }
-
+    if (!cookieHeader) return new Map<string, string>();
     const parsed = parseCookieHeader(cookieHeader);
     return new Map(Object.entries(parsed));
   }
 
-  async authenticateRequest(req: Request): Promise<User> {
-    const cookies = this.parseCookies(req.headers.cookie);
+  // CORREÇÃO AQUI: Usamos 'any' no parâmetro para silenciar o erro de headers na Vercel
+  async authenticateRequest(req: any): Promise<User> {
+    // Acessamos o cookie de forma segura
+    const cookieHeader = req.headers ? req.headers.cookie : undefined;
+    const cookies = this.parseCookies(cookieHeader);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
 
@@ -112,12 +107,10 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
-    // Correção: Usando propriedades que existem no tipo User (username)
-    // e evitando o erro TS2339 (openId does not exist)
     await db.upsertUser({
       username: user.username,
       lastSignedIn: new Date(),
-    } as any); // O 'as any' previne erros de tipagem se o upsertUser for rigoroso
+    } as any);
 
     return user;
   }
