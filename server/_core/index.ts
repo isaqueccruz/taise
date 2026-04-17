@@ -3,8 +3,12 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { appRouter } from "../routers.ts";
-import { createContext } from "./context";
+
+// A correção principal está nestas duas linhas abaixo:
+// Mesmo o arquivo sendo .ts no seu notebook VAIO, aqui usamos .js 
+// para que a Vercel encontre o arquivo compilado no servidor.
+import { appRouter } from "../routers.js";
+import { createContext } from "./context.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +30,7 @@ app.use(
 );
 
 // Servir arquivos estáticos do build
+// Certifique-se de que a pasta 'dist/public' existe após o build no seu GitHub
 const publicPath = path.join(__dirname, "../../dist/public");
 app.use(express.static(publicPath));
 
