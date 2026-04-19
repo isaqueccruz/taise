@@ -1,7 +1,17 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/trpc/(.*)", "destination": "/api/index.ts" },
-    { "source": "/(.*)", "destination": "/api/index.ts" }
+    { 
+      "source": "/api/trpc/(.*)", 
+      "destination": "/api/index.ts" 
+    },
+    { 
+      "source": "/assets/(.*)", 
+      "destination": "/dist/public/assets/$1" 
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": "/api/index.ts" 
+    }
   ]
 }
