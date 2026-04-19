@@ -11,7 +11,8 @@ import { z as z2 } from "zod";
 
 // server/db.ts
 import { and, desc, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
 // drizzle/schema.ts
 import { pgTable, serial, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
@@ -62,6 +63,94 @@ var contactMessages = pgTable("contact_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull()
 });
 
+// server/db.ts
+var connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.warn("[Database] DATABASE_URL n\xE3o encontrada.");
+}
+var client = connectionString ? postgres(connectionString) : null;
+var db = client ? drizzle(client) : null;
+async function getUserByOpenId(id) {
+  if (!db) return void 0;
+  const result = await db.select().from(users).where(eq(users.username, id)).limit(1);
+  return result[0];
+}
+async function upsertUser(user) {
+  return;
+}
+async function getAllCategories() {
+  if (!db) return [];
+  return db.select().from(categories).orderBy(categories.name);
+}
+async function createCategory(data) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.insert(categories).values(data);
+}
+async function updateCategory(id, data) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.update(categories).set(data).where(eq(categories.id, id));
+}
+async function deleteCategory(id) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.delete(categories).where(eq(categories.id, id));
+}
+async function getAllProducts(filters) {
+  if (!db) return [];
+  const conditions = [];
+  if (filters?.categoryId !== void 0) conditions.push(eq(products.categoryId, filters.categoryId));
+  if (filters?.available !== void 0) conditions.push(eq(products.available, filters.available));
+  if (filters?.featured !== void 0) conditions.push(eq(products.featured, filters.featured));
+  if (conditions.length > 0) {
+    return db.select().from(products).where(and(...conditions)).orderBy(desc(products.createdAt));
+  }
+  return db.select().from(products).orderBy(desc(products.createdAt));
+}
+async function getProductById(id) {
+  if (!db) return void 0;
+  const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  return result[0];
+}
+async function createProduct(data) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.insert(products).values(data);
+}
+async function updateProduct(id, data) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.update(products).set(data).where(eq(products.id, id));
+}
+async function deleteProduct(id) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.delete(products).where(eq(products.id, id));
+}
+async function getFeaturedProducts(limit = 6) {
+  if (!db) return [];
+  return db.select().from(products).where(and(eq(products.featured, true), eq(products.available, true))).orderBy(desc(products.createdAt)).limit(limit);
+}
+async function createContactMessage(data) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.insert(contactMessages).values(data);
+}
+async function getAllContactMessages() {
+  if (!db) return [];
+  return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
+}
+async function markMessageRead(id, read) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.update(contactMessages).set({ read }).where(eq(contactMessages.id, id));
+}
+async function deleteContactMessage(id) {
+  if (!db) throw new Error("DB indispon\xEDvel");
+  return db.delete(contactMessages).where(eq(contactMessages.id, id));
+}
+async function getUnreadMessageCount() {
+  if (!db) return 0;
+  const result = await db.select().from(contactMessages).where(eq(contactMessages.read, false));
+  return result.length;
+}
+
+// server/_core/notification.ts
+import { TRPCError } from "@trpc/server";
+
 // server/_core/env.ts
 var ENV = {
   appId: process.env.VITE_APP_ID ?? "",
@@ -74,150 +163,7 @@ var ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
 };
 
-// server/db.ts
-var _db = null;
-async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
-  }
-  return _db;
-}
-async function upsertUser(user) {
-  if (!user.openId) throw new Error("User openId is required for upsert");
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-  try {
-    const values = { openId: user.openId };
-    const updateSet = {};
-    const textFields = ["name", "email", "loginMethod"];
-    const assignNullable = (field) => {
-      const value = user[field];
-      if (value === void 0) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-    textFields.forEach(assignNullable);
-    if (user.lastSignedIn !== void 0) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== void 0) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-    if (!values.lastSignedIn) values.lastSignedIn = /* @__PURE__ */ new Date();
-    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = /* @__PURE__ */ new Date();
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-async function getUserByOpenId(openId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function getAllCategories() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(categories).orderBy(categories.name);
-}
-async function createCategory(data) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(categories).values(data);
-  return result;
-}
-async function updateCategory(id, data) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.update(categories).set(data).where(eq(categories.id, id));
-}
-async function deleteCategory(id) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.delete(categories).where(eq(categories.id, id));
-}
-async function getAllProducts(filters) {
-  const db = await getDb();
-  if (!db) return [];
-  const conditions = [];
-  if (filters?.categoryId !== void 0) conditions.push(eq(products.categoryId, filters.categoryId));
-  if (filters?.available !== void 0) conditions.push(eq(products.available, filters.available));
-  if (filters?.featured !== void 0) conditions.push(eq(products.featured, filters.featured));
-  const query = conditions.length > 0 ? db.select().from(products).where(and(...conditions)).orderBy(desc(products.createdAt)) : db.select().from(products).orderBy(desc(products.createdAt));
-  return query;
-}
-async function getFeaturedProducts(limit = 6) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(products).where(and(eq(products.featured, true), eq(products.available, true))).orderBy(desc(products.createdAt)).limit(limit);
-}
-async function getProductById(id) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
-  return result[0];
-}
-async function createProduct(data) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(products).values(data);
-  return result;
-}
-async function updateProduct(id, data) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.update(products).set(data).where(eq(products.id, id));
-}
-async function deleteProduct(id) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.delete(products).where(eq(products.id, id));
-}
-async function createContactMessage(data) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.insert(contactMessages).values(data);
-}
-async function getAllContactMessages() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
-}
-async function markMessageRead(id, read) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.update(contactMessages).set({ read }).where(eq(contactMessages.id, id));
-}
-async function deleteContactMessage(id) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.delete(contactMessages).where(eq(contactMessages.id, id));
-}
-async function getUnreadMessageCount() {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select().from(contactMessages).where(eq(contactMessages.read, false));
-  return result.length;
-}
-
 // server/_core/notification.ts
-import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
 var trimValue = (value) => value.trim();
@@ -307,7 +253,7 @@ var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
 // server/_core/cookies.ts
 function isSecureRequest(req) {
   if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
+  const forwardedProto = req.headers ? req.headers["x-forwarded-proto"] : null;
   if (!forwardedProto) return false;
   const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
   return protoList.some((proto) => proto.trim().toLowerCase() === "https");
@@ -316,6 +262,8 @@ function getSessionCookieOptions(req) {
   return {
     httpOnly: true,
     path: "/",
+    // 'lax' é mais seguro para a maioria dos sites, 
+    // mas se o admin estiver em subdomínios diferentes, 'none' exige 'secure: true'
     sameSite: "none",
     secure: isSecureRequest(req)
   };
@@ -565,8 +513,10 @@ var appRouter = router({
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      if (ctx.res && typeof ctx.res.clearCookie === "function") {
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      }
       return { success: true };
     })
   }),
@@ -616,9 +566,7 @@ var SDKServer = class {
     }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey);
   }
   async verifySession(cookieValue) {
-    if (!cookieValue) {
-      return null;
-    }
+    if (!cookieValue) return null;
     try {
       const secretKey = this.getSessionSecret();
       const { payload } = await jwtVerify(cookieValue, secretKey, {
@@ -628,38 +576,33 @@ var SDKServer = class {
       if (!isNonEmptyString2(openId) || !isNonEmptyString2(appId) || !isNonEmptyString2(name)) {
         return null;
       }
-      return {
-        openId,
-        appId,
-        name
-      };
+      return { openId, appId, name };
     } catch (error) {
       return null;
     }
   }
   parseCookies(cookieHeader) {
-    if (!cookieHeader) {
-      return /* @__PURE__ */ new Map();
-    }
+    if (!cookieHeader) return /* @__PURE__ */ new Map();
     const parsed = parseCookieHeader(cookieHeader);
     return new Map(Object.entries(parsed));
   }
+  // CORREÇÃO AQUI: Usamos 'any' no parâmetro para silenciar o erro de headers na Vercel
   async authenticateRequest(req) {
-    const cookies = this.parseCookies(req.headers.cookie);
+    const cookieHeader = req.headers ? req.headers.cookie : void 0;
+    const cookies = this.parseCookies(cookieHeader);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
     }
     const sessionUserId = session.openId;
-    const signedInAt = /* @__PURE__ */ new Date();
     let user = await getUserByOpenId(sessionUserId);
     if (!user) {
       throw ForbiddenError("User not found");
     }
     await upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt
+      username: user.username,
+      lastSignedIn: /* @__PURE__ */ new Date()
     });
     return user;
   }
@@ -682,6 +625,7 @@ async function createContext(opts) {
 }
 
 // server/_core/index.ts
+import fs from "fs";
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var app = express();
@@ -695,10 +639,26 @@ app.use(
     createContext
   })
 );
-var publicPath = path.join(__dirname, "../../dist/public");
+var getPublicPath = () => {
+  const paths = [
+    path.join(process.cwd(), "dist", "public"),
+    path.join(__dirname, "..", "..", "dist", "public"),
+    path.join(__dirname, "dist", "public")
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return paths[0];
+};
+var publicPath = getPublicPath();
 app.use(express.static(publicPath));
 app.get("*", (req, res) => {
-  res.sendFile(path.join(publicPath, "index.html"));
+  const indexPath = path.join(publicPath, "index.html");
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send(`Arquivo index.html n\xE3o encontrado em: ${publicPath}`);
+  }
 });
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}/`);
