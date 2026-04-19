@@ -1,20 +1,27 @@
-import { pgTable, serial, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  decimal,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+  serial,
+} from "drizzle-orm/pg-core";
 
-/**
- * Schema para Supabase (PostgreSQL)
- * Adaptado para autenticação simples com username/password
- */
+export const roleEnum = pgEnum("role", ["user", "admin"]);
 
-// ─── Users ────────────────────────────────────────────────────────────────────
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: varchar("username", { length: 255 }).notNull().unique(),
-  password: text("password").notNull(), // Hash bcrypt
-  email: varchar("email", { length: 320 }).notNull().unique(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
-  role: varchar("role", { length: 50 }).default("user").notNull(), // "admin" ou "user"
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: roleEnum("role").default("user").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
 export type User = typeof users.$inferSelect;
@@ -26,8 +33,8 @@ export const categories = pgTable("categories", {
   name: varchar("name", { length: 128 }).notNull(),
   slug: varchar("slug", { length: 128 }).notNull().unique(),
   description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Category = typeof categories.$inferSelect;
@@ -38,15 +45,15 @@ export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 256 }).notNull(),
   description: text("description"),
-  price: integer("price").notNull(), // Preço em centavos
-  imageUrl: text("image_url"),
-  categoryId: integer("category_id").notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  imageUrl: text("imageUrl"),
+  categoryId: integer("categoryId").references(() => categories.id),
   featured: boolean("featured").default(false).notNull(),
   available: boolean("available").default(true).notNull(),
   servings: varchar("servings", { length: 64 }),
   ingredients: text("ingredients"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Product = typeof products.$inferSelect;
@@ -60,9 +67,9 @@ export const contactMessages = pgTable("contact_messages", {
   phone: varchar("phone", { length: 32 }),
   subject: varchar("subject", { length: 256 }),
   message: text("message").notNull(),
-  productId: integer("product_id"),
+  productId: integer("productId").references(() => products.id),
   read: boolean("read").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type ContactMessage = typeof contactMessages.$inferSelect;
