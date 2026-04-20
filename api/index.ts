@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import path from "path";
 import fs from "fs";
@@ -11,7 +11,7 @@ import { createContext } from "../server/_core/context.js";
 const app = express();
 
 // Middleware de Log para você ver o erro real no painel da Vercel
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   console.log(`[Request]: ${req.method} ${req.url}`);
   next();
 });
@@ -50,7 +50,7 @@ const publicPath = getPublicPath();
 app.use(express.static(publicPath));
 
 // 4. Fallback SPA (Onde o /admin morre atualmente)
-app.get("*", (req, res) => {
+app.get("*", (req: Request, res: Response) => {
   // Ignorar chamadas de API que deram errado
   if (req.url.startsWith('/api')) {
     return res.status(404).json({ error: "Not Found" });
