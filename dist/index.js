@@ -15,41 +15,50 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 // drizzle/schema.ts
-import { pgTable, serial, text, varchar, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  decimal,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+  serial
+} from "drizzle-orm/pg-core";
+var roleEnum = pgEnum("role", ["user", "admin"]);
 var users = pgTable("users", {
   id: serial("id").primaryKey(),
-  username: varchar("username", { length: 255 }).notNull().unique(),
-  password: text("password").notNull(),
-  // Hash bcrypt
-  email: varchar("email", { length: 320 }).notNull().unique(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
-  role: varchar("role", { length: 50 }).default("user").notNull(),
-  // "admin" ou "user"
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: roleEnum("role").default("user").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
 });
 var categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 128 }).notNull(),
   slug: varchar("slug", { length: 128 }).notNull().unique(),
   description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull()
 });
 var products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 256 }).notNull(),
   description: text("description"),
-  price: integer("price").notNull(),
-  // Preço em centavos
-  imageUrl: text("image_url"),
-  categoryId: integer("category_id").notNull(),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  imageUrl: text("imageUrl"),
+  categoryId: integer("categoryId").references(() => categories.id),
   featured: boolean("featured").default(false).notNull(),
   available: boolean("available").default(true).notNull(),
   servings: varchar("servings", { length: 64 }),
   ingredients: text("ingredients"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull()
 });
 var contactMessages = pgTable("contact_messages", {
   id: serial("id").primaryKey(),
@@ -58,98 +67,10 @@ var contactMessages = pgTable("contact_messages", {
   phone: varchar("phone", { length: 32 }),
   subject: varchar("subject", { length: 256 }),
   message: text("message").notNull(),
-  productId: integer("product_id"),
+  productId: integer("productId").references(() => products.id),
   read: boolean("read").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull()
+  createdAt: timestamp("createdAt").defaultNow().notNull()
 });
-
-// server/db.ts
-var connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  console.warn("[Database] DATABASE_URL n\xE3o encontrada.");
-}
-var client = connectionString ? postgres(connectionString) : null;
-var db = client ? drizzle(client) : null;
-async function getUserByOpenId(id) {
-  if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.username, id)).limit(1);
-  return result[0];
-}
-async function upsertUser(user) {
-  return;
-}
-async function getAllCategories() {
-  if (!db) return [];
-  return db.select().from(categories).orderBy(categories.name);
-}
-async function createCategory(data) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.insert(categories).values(data);
-}
-async function updateCategory(id, data) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.update(categories).set(data).where(eq(categories.id, id));
-}
-async function deleteCategory(id) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.delete(categories).where(eq(categories.id, id));
-}
-async function getAllProducts(filters) {
-  if (!db) return [];
-  const conditions = [];
-  if (filters?.categoryId !== void 0) conditions.push(eq(products.categoryId, filters.categoryId));
-  if (filters?.available !== void 0) conditions.push(eq(products.available, filters.available));
-  if (filters?.featured !== void 0) conditions.push(eq(products.featured, filters.featured));
-  if (conditions.length > 0) {
-    return db.select().from(products).where(and(...conditions)).orderBy(desc(products.createdAt));
-  }
-  return db.select().from(products).orderBy(desc(products.createdAt));
-}
-async function getProductById(id) {
-  if (!db) return void 0;
-  const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
-  return result[0];
-}
-async function createProduct(data) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.insert(products).values(data);
-}
-async function updateProduct(id, data) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.update(products).set(data).where(eq(products.id, id));
-}
-async function deleteProduct(id) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.delete(products).where(eq(products.id, id));
-}
-async function getFeaturedProducts(limit = 6) {
-  if (!db) return [];
-  return db.select().from(products).where(and(eq(products.featured, true), eq(products.available, true))).orderBy(desc(products.createdAt)).limit(limit);
-}
-async function createContactMessage(data) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.insert(contactMessages).values(data);
-}
-async function getAllContactMessages() {
-  if (!db) return [];
-  return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
-}
-async function markMessageRead(id, read) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.update(contactMessages).set({ read }).where(eq(contactMessages.id, id));
-}
-async function deleteContactMessage(id) {
-  if (!db) throw new Error("DB indispon\xEDvel");
-  return db.delete(contactMessages).where(eq(contactMessages.id, id));
-}
-async function getUnreadMessageCount() {
-  if (!db) return 0;
-  const result = await db.select().from(contactMessages).where(eq(contactMessages.read, false));
-  return result.length;
-}
-
-// server/_core/notification.ts
-import { TRPCError } from "@trpc/server";
 
 // server/_core/env.ts
 var ENV = {
@@ -163,7 +84,158 @@ var ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
 };
 
+// server/db.ts
+var _db = null;
+var _client = null;
+async function getDb() {
+  if (!_db && process.env.DATABASE_URL) {
+    try {
+      _client = postgres(process.env.DATABASE_URL);
+      _db = drizzle(_client);
+    } catch (error) {
+      console.warn("[Database] Failed to connect:", error);
+      _db = null;
+      _client = null;
+    }
+  }
+  return _db;
+}
+async function upsertUser(user) {
+  if (!user.openId) throw new Error("User openId is required for upsert");
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert user: database not available");
+    return;
+  }
+  try {
+    const values = { openId: user.openId };
+    const updateSet = {};
+    const textFields = ["name", "email", "loginMethod"];
+    const assignNullable = (field) => {
+      const value = user[field];
+      if (value === void 0) return;
+      const normalized = value ?? null;
+      values[field] = normalized;
+      updateSet[field] = normalized;
+    };
+    textFields.forEach(assignNullable);
+    if (user.lastSignedIn !== void 0) {
+      values.lastSignedIn = user.lastSignedIn;
+      updateSet.lastSignedIn = user.lastSignedIn;
+    }
+    if (user.role !== void 0) {
+      values.role = user.role;
+      updateSet.role = user.role;
+    } else if (user.openId === ENV.ownerOpenId) {
+      values.role = "admin";
+      updateSet.role = "admin";
+    }
+    if (!values.lastSignedIn) values.lastSignedIn = /* @__PURE__ */ new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = /* @__PURE__ */ new Date();
+    const existingUser = await getUserByOpenId(user.openId);
+    if (existingUser) {
+      await db.update(users).set(updateSet).where(eq(users.openId, user.openId));
+    } else {
+      await db.insert(users).values(values);
+    }
+  } catch (error) {
+    console.error("[Database] Failed to upsert user:", error);
+    throw error;
+  }
+}
+async function getUserByOpenId(openId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getAllCategories() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(categories).orderBy(categories.name);
+}
+async function createCategory(data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(categories).values(data);
+  return result;
+}
+async function updateCategory(id, data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(categories).set(data).where(eq(categories.id, id));
+}
+async function deleteCategory(id) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(categories).where(eq(categories.id, id));
+}
+async function getAllProducts(filters) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters?.categoryId !== void 0) conditions.push(eq(products.categoryId, filters.categoryId));
+  if (filters?.available !== void 0) conditions.push(eq(products.available, filters.available));
+  if (filters?.featured !== void 0) conditions.push(eq(products.featured, filters.featured));
+  const query = conditions.length > 0 ? db.select().from(products).where(and(...conditions)).orderBy(desc(products.createdAt)) : db.select().from(products).orderBy(desc(products.createdAt));
+  return query;
+}
+async function getFeaturedProducts(limit = 6) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(products).where(and(eq(products.featured, true), eq(products.available, true))).orderBy(desc(products.createdAt)).limit(limit);
+}
+async function getProductById(id) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(products).where(eq(products.id, id)).limit(1);
+  return result[0];
+}
+async function createProduct(data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(products).values(data);
+  return result;
+}
+async function updateProduct(id, data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(products).set(data).where(eq(products.id, id));
+}
+async function deleteProduct(id) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(products).where(eq(products.id, id));
+}
+async function createContactMessage(data) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(contactMessages).values(data);
+}
+async function getAllContactMessages() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(contactMessages).orderBy(desc(contactMessages.createdAt));
+}
+async function markMessageRead(id, read) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.update(contactMessages).set({ read }).where(eq(contactMessages.id, id));
+}
+async function deleteContactMessage(id) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.delete(contactMessages).where(eq(contactMessages.id, id));
+}
+async function getUnreadMessageCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select().from(contactMessages).where(eq(contactMessages.read, false));
+  return result.length;
+}
+
 // server/_core/notification.ts
+import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
 var trimValue = (value) => value.trim();
@@ -601,7 +673,9 @@ var SDKServer = class {
       throw ForbiddenError("User not found");
     }
     await upsertUser({
-      username: user.username,
+      openId: user.openId || user.id,
+      name: user.name,
+      email: user.email,
       lastSignedIn: /* @__PURE__ */ new Date()
     });
     return user;
