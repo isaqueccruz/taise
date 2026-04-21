@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import path from "path";
 import fs from "fs";
@@ -11,7 +11,7 @@ import { createContext } from "../server/_core/context.js";
 const app = express();
 
 // Middleware de Log para você ver o erro real no painel da Vercel
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   console.log(`[Request]: ${req.method} ${req.url}`);
   next();
 });
@@ -28,13 +28,29 @@ app.use(
 );
 
 // 2. Resolver o caminho da pasta dist/public de forma segura
-const publicPath = path.resolve(process.cwd(), "dist", "public");
+const getPublicPath = () => {
+  const paths = [
+    path.resolve(process.cwd(), "dist", "public"),
+    path.resolve("/var/task", "dist", "public"),
+    path.resolve("/vercel/path0", "dist", "public"),
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      console.log(`[INFO]: Found public path at: ${p}`);
+      return p;
+    }
+  }
+  console.warn(`[WARN]: No public path found. Checked: ${paths.join(", ")}`);
+  return paths[0];
+};
+
+const publicPath = getPublicPath();
 
 // 3. Servir estáticos
 app.use(express.static(publicPath));
 
 // 4. Fallback SPA (Onde o /admin morre atualmente)
-app.get("*", (req, res) => {
+app.get("*", (req: Request, res: Response) => {
   // Ignorar chamadas de API que deram errado
   if (req.url.startsWith('/api')) {
     return res.status(404).json({ error: "Not Found" });
@@ -45,7 +61,10 @@ app.get("*", (req, res) => {
   // Log para sabermos se o arquivo realmente existe no servidor
   if (!fs.existsSync(indexPath)) {
     console.error(`[ERRO]: index.html não encontrado em: ${indexPath}`);
-    return res.status(500).send(`Erro Interno: Arquivos do frontend não encontrados no servidor.`);
+    console.error(`[DEBUG]: publicPath = ${publicPath}`);
+    console.error(`[DEBUG]: process.cwd() = ${process.cwd()}`);
+    console.error(`[DEBUG]: Arquivos em publicPath:`, fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : 'DIR NÃO EXISTE');
+    return res.status(500).json({ error: "Frontend files not found", publicPath, indexPath });
   }
 
   res.sendFile(indexPath);
